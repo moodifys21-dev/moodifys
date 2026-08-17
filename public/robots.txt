@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /account/
+Disallow: /checkout/
+Allow: /
+
+Sitemap: https://moodifys.onrender.com/sitemap.xml

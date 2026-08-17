@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #090808;
+  --color-charcoal: #302F2E;
+  --color-warm-gray: #BEBDBB;
+  --color-off-white: #E1E0DC;
+  --color-light-bg: #F0EFED;
+  --color-pure-white: #FFFFFF;
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: #E1E0DC;
+  }
+
+  body {
+    background-color: var(--color-light-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    letter-spacing: -0.01em;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.04em;
+  }
+}
+
+/* Editorial display typography utility */
+.editorial-hero-title {
+  font-size: clamp(3.5rem, 9.5vw, 9.5rem);
+  line-height: 0.88;
+  letter-spacing: -0.055em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.editorial-section-title {
+  font-size: clamp(2.5rem, 6vw, 6rem);
+  line-height: 0.92;
+  letter-spacing: -0.045em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* Compact uppercase tracked labels */
+.label-upper {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+/* Subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F0EFED;
+}
+::-webkit-scrollbar-thumb {
+  background: #BEBDBB;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #302F2E;
+}
