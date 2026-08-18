@@ -24,6 +24,8 @@ import {
   Sparkles,
 } from 'lucide-react'
 
+import { useAdminAuth } from '@/hooks/useAdminAuth'
+
 type CMSMediaTarget =
   | 'HERO_CENTER'
   | 'EDITORIAL_DESKTOP'
@@ -34,9 +36,12 @@ type CMSMediaTarget =
   | null
 
 export const AdminHomepageCMS: React.FC = () => {
+  const { adminUser } = useAdminAuth()
   const {
     config,
     isDraft,
+    isPublishing,
+    lastPublishedVersion,
     updateHero,
     updateEditorial,
     updateFeaturedProducts,
@@ -44,6 +49,7 @@ export const AdminHomepageCMS: React.FC = () => {
     updateCustomizationCTA,
     reorderSections,
     toggleSectionVisibility,
+    saveDraft,
     publishLive,
   } = useCMSStore()
 
@@ -57,7 +63,8 @@ export const AdminHomepageCMS: React.FC = () => {
   const directFileInputRef = useRef<HTMLInputElement>(null)
   const [directUploadTarget, setDirectUploadTarget] = useState<CMSMediaTarget>('EDITORIAL_DESKTOP')
 
-  const [savedAlert, setSavedAlert] = useState(false)
+  const [savedAlert, setSavedAlert] = useState<string | null>(null)
+  const [publishError, setPublishError] = useState<string | null>(null)
   const [previewSection, setPreviewSection] = useState<'editorial' | 'categories' | null>(null)
 
   // Category modal state for Add/Edit Category
@@ -102,9 +109,32 @@ export const AdminHomepageCMS: React.FC = () => {
     setActiveAccordion(activeAccordion === key ? '' : key)
   }
 
-  const triggerSavedFeedback = () => {
-    setSavedAlert(true)
-    setTimeout(() => setSavedAlert(false), 3000)
+  const triggerSavedFeedback = (msg = 'SAVED AS DRAFT') => {
+    setSavedAlert(msg)
+    setPublishError(null)
+    setTimeout(() => setSavedAlert(null), 4000)
+  }
+
+  const handlePublish = async () => {
+    setPublishError(null)
+    const author = adminUser?.fullName || 'Admin Operator'
+    const res = await publishLive(author, 'Published via Admin Portal')
+    if (res.success) {
+      triggerSavedFeedback('HOMEPAGE PUBLISHED LIVE TO SUPABASE & ALL DEVICES')
+    } else {
+      setPublishError(res.error || 'Failed to publish to Supabase')
+    }
+  }
+
+  const handleSaveDraft = async () => {
+    setPublishError(null)
+    const author = adminUser?.fullName || 'Admin Operator'
+    const res = await saveDraft(author)
+    if (res.success) {
+      triggerSavedFeedback('DRAFT SAVED TO SUPABASE')
+    } else {
+      setPublishError(res.error || 'Failed to save draft')
+    }
   }
 
   const handleMediaSelected = (url: string) => {
@@ -321,7 +351,7 @@ export const AdminHomepageCMS: React.FC = () => {
               </span>
             ) : (
               <span className="px-2 py-0.5 bg-emerald-100 text-emerald-900 font-mono text-[9px] font-bold uppercase border border-emerald-300">
-                HOMEPAGE PUBLISHED LIVE
+                LIVE ON ALL DEVICES {lastPublishedVersion ? `(${lastPublishedVersion})` : ''}
               </span>
             )}
           </div>
@@ -332,9 +362,15 @@ export const AdminHomepageCMS: React.FC = () => {
 
         <div className="flex items-center gap-3">
           {savedAlert && (
-            <span className="px-3 py-1.5 bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-mono font-bold flex items-center gap-1.5">
+            <span className="px-3 py-1.5 bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-mono font-bold flex items-center gap-1.5 animate-in fade-in">
               <CheckCircle2 size={13} className="text-emerald-700" />
-              <span>SAVED AS DRAFT</span>
+              <span>{savedAlert}</span>
+            </span>
+          )}
+
+          {publishError && (
+            <span className="px-3 py-1.5 bg-rose-100 text-rose-900 border border-rose-300 text-xs font-mono font-bold flex items-center gap-1.5 animate-in fade-in">
+              <span>{publishError}</span>
             </span>
           )}
 
@@ -349,10 +385,8 @@ export const AdminHomepageCMS: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => {
-              triggerSavedFeedback()
-            }}
-            className="inline-flex items-center gap-1.5 px-4 py-2 border border-[#090808] bg-white text-[#090808] text-xs font-mono font-bold uppercase hover:bg-[#F0EFED] shadow-xs"
+            onClick={handleSaveDraft}
+            className="inline-flex items-center gap-1.5 px-4 py-2 border border-[#090808] bg-white text-[#090808] text-xs font-mono font-bold uppercase hover:bg-[#F0EFED] shadow-xs cursor-pointer"
           >
             <Save size={13} />
             <span>SAVE DRAFT</span>
@@ -360,14 +394,12 @@ export const AdminHomepageCMS: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => {
-              publishLive()
-              triggerSavedFeedback()
-            }}
-            className="inline-flex items-center gap-1.5 px-5 py-2 bg-[#090808] text-white text-xs font-mono font-bold uppercase hover:opacity-85 shadow-md"
+            disabled={isPublishing}
+            onClick={handlePublish}
+            className="inline-flex items-center gap-1.5 px-5 py-2 bg-[#090808] text-white text-xs font-mono font-bold uppercase hover:opacity-85 shadow-md disabled:opacity-50 cursor-pointer"
           >
-            <CheckCircle2 size={13} />
-            <span>PUBLISH LIVE</span>
+            <CheckCircle2 size={13} className={isPublishing ? 'animate-spin' : ''} />
+            <span>{isPublishing ? 'PUBLISHING TO SUPABASE...' : 'PUBLISH LIVE'}</span>
           </button>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useCMSVersionStore } from '@/stores/cmsVersionStore'
 import { useCMSStore } from '@/stores/cmsStore'
@@ -16,8 +16,12 @@ import {
 } from 'lucide-react'
 
 export const AdminCMSVersions: React.FC = () => {
-  const { versions, scheduled, rollbackToVersion, scheduleRelease, cancelScheduledRelease } = useCMSVersionStore()
+  const { versions, scheduled, loadVersionsFromSupabase, rollbackToVersion, scheduleRelease, cancelScheduledRelease } = useCMSVersionStore()
   const { config: currentConfig } = useCMSStore()
+
+  useEffect(() => {
+    loadVersionsFromSupabase()
+  }, [loadVersionsFromSupabase])
 
   // Selected for inspection
   const [inspectedVersion, setInspectedVersion] = useState<CMSVersion | null>(null)
@@ -27,13 +31,13 @@ export const AdminCMSVersions: React.FC = () => {
   const [scheduleTitle, setScheduleTitle] = useState('')
   const [scheduleDateTime, setScheduleDateTime] = useState('')
 
-  const handleRollback = (ver: CMSVersion) => {
+  const handleRollback = async (ver: CMSVersion) => {
     if (
       window.confirm(
         `EMERGENCY ROLLBACK CONFIRMATION:\n\nAre you sure you want to rollback the live homepage storefront to "${ver.versionNumber}"?\n\nThis will immediately overwrite current live content.`
       )
     ) {
-      const success = rollbackToVersion(ver.id)
+      const success = await rollbackToVersion(ver.id)
       if (success) {
         setInspectedVersion(null)
         alert(`Successfully restored homepage to version: ${ver.versionNumber}`)

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { MediaAsset, MediaFolder } from '@/types/media'
 import { useAuditLogStore } from './auditLogStore'
+import { uploadMediaFile } from '@/services/mediaService'
 
 interface MediaStoreState {
   assets: MediaAsset[]
@@ -164,55 +165,27 @@ export const useMediaStore = create<MediaStoreState>()(
       },
 
       uploadFile: async (file: File, folder: MediaFolder, uploadedBy = 'Admin Operator') => {
-        // Read file into persistent data URL
-        return new Promise((resolve) => {
-          const reader = new FileReader()
-          reader.onload = (e) => {
-            const dataUrl = e.target?.result as string
-            const sizeInMb = (file.size / (1024 * 1024)).toFixed(1) + ' MB'
-            const cleanTitle = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').toUpperCase()
+        const newAsset = await uploadMediaFile(file, folder, uploadedBy)
+        set({ assets: [newAsset, ...get().assets] })
 
-            const newAsset: MediaAsset = {
-              id: `med-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-              title: cleanTitle,
-              fileName: file.name,
-              storagePath: `${folder.toLowerCase().replace(/\s+/g, '-')}/${file.name}`,
-              url: dataUrl,
-              publicUrl: dataUrl,
-              folder,
-              mimeType: file.type || 'image/jpeg',
-              fileSize: sizeInMb,
-              dimensions: '1920 × 2560 px (Uploaded)',
-              altText: cleanTitle,
-              uploadedBy,
-              usedIn: [],
-              createdAt: new Date().toISOString(),
-            }
+        try {
+          useAuditLogStore.getState().addLog({
+            actorId: 'admin-actor',
+            actorName: uploadedBy,
+            actorRole: 'ADMIN',
+            action: 'MEDIA_UPLOADED_FROM_COMPUTER',
+            category: 'PRODUCTS',
+            entityType: 'MediaAsset',
+            entityId: newAsset.id,
+            severity: 'INFO',
+            ipAddress: '127.0.0.1',
+            newData: { fileName: newAsset.fileName, folder, fileSize: newAsset.fileSize },
+          })
+        } catch {
+          // ignore
+        }
 
-            set({ assets: [newAsset, ...get().assets] })
-
-            try {
-              useAuditLogStore.getState().addLog({
-                actorId: 'admin-actor',
-                actorName: uploadedBy,
-                actorRole: 'ADMIN',
-                action: 'MEDIA_UPLOADED_FROM_COMPUTER',
-                category: 'PRODUCTS',
-                entityType: 'MediaAsset',
-                entityId: newAsset.id,
-                severity: 'INFO',
-                ipAddress: '127.0.0.1',
-                newData: { fileName: file.name, folder, fileSize: sizeInMb },
-              })
-            } catch {
-              // ignore
-            }
-
-            resolve(newAsset)
-          }
-
-          reader.readAsDataURL(file)
-        })
+        return newAsset
       },
 
       updateAsset: (id, updates) => {

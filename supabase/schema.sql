@@ -206,6 +206,21 @@ CREATE TABLE IF NOT EXISTS public.admin_notifications (
   created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
+-- 12. HOMEPAGE CMS & VERSIONING TABLE
+CREATE TABLE IF NOT EXISTS public.homepage_versions (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  version_number TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft', -- 'draft', 'published', 'archived'
+  change_summary TEXT,
+  author_name TEXT,
+  content JSONB NOT NULL,
+  published_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_homepage_versions_status_pub ON public.homepage_versions(status, published_at DESC);
+
 -- Enable RLS
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
@@ -223,6 +238,8 @@ ALTER TABLE public.role_permissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.homepage_versions ENABLE ROW LEVEL SECURITY;
+
 
 -- Helper security functions
 CREATE OR REPLACE FUNCTION public.is_admin_user(user_uuid UUID)
@@ -344,11 +361,23 @@ CREATE POLICY "Super admins can manage admin users" ON public.admin_users FOR AL
 CREATE POLICY "Audit logs viewable by authorized admins" ON public.audit_logs FOR SELECT USING (public.has_permission(auth.uid(), 'audit_logs.view'));
 CREATE POLICY "Admin notifications viewable by staff" ON public.admin_notifications FOR ALL USING (public.is_admin_user(auth.uid()));
 
+-- Policies for Homepage CMS versions
+DROP POLICY IF EXISTS "Public Read Published Homepage Versions" ON public.homepage_versions;
+DROP POLICY IF EXISTS "Admins Manage Homepage Versions" ON public.homepage_versions;
+
+CREATE POLICY "Public Read Published Homepage Versions" ON public.homepage_versions 
+  FOR SELECT USING (status = 'published' OR public.is_admin_user(auth.uid()));
+
+CREATE POLICY "Admins Manage Homepage Versions" ON public.homepage_versions 
+  FOR ALL USING (public.is_admin_user(auth.uid()) OR public.has_permission(auth.uid(), 'homepage.publish'));
+
 -- ==============================================================================
 -- STORAGE BUCKETS & POLICIES
 -- ==============================================================================
 INSERT INTO storage.buckets (id, name, public) VALUES 
   ('product-images', 'product-images', true),
+  ('homepage-images', 'homepage-images', true),
+  ('category-images', 'category-images', true),
   ('design-previews', 'design-previews', true),
   ('user-uploads', 'user-uploads', false),
   ('avatars', 'avatars', true),
@@ -356,15 +385,22 @@ INSERT INTO storage.buckets (id, name, public) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 DROP POLICY IF EXISTS "Public Read Product Images" ON storage.objects;
+DROP POLICY IF EXISTS "Public Read Homepage Images" ON storage.objects;
+DROP POLICY IF EXISTS "Public Read Category Images" ON storage.objects;
 DROP POLICY IF EXISTS "Public Read Design Previews" ON storage.objects;
 DROP POLICY IF EXISTS "Public Read Media Library" ON storage.objects;
 DROP POLICY IF EXISTS "Admins Can Upload Product Images" ON storage.objects;
+DROP POLICY IF EXISTS "Admins Can Upload Homepage Images" ON storage.objects;
 DROP POLICY IF EXISTS "Users Can Upload Design Previews" ON storage.objects;
 DROP POLICY IF EXISTS "Users Can Upload User Uploads" ON storage.objects;
 
 CREATE POLICY "Public Read Product Images" ON storage.objects FOR SELECT USING (bucket_id = 'product-images');
+CREATE POLICY "Public Read Homepage Images" ON storage.objects FOR SELECT USING (bucket_id = 'homepage-images');
+CREATE POLICY "Public Read Category Images" ON storage.objects FOR SELECT USING (bucket_id = 'category-images');
 CREATE POLICY "Public Read Design Previews" ON storage.objects FOR SELECT USING (bucket_id = 'design-previews');
 CREATE POLICY "Public Read Media Library" ON storage.objects FOR SELECT USING (bucket_id = 'media-library');
-CREATE POLICY "Admins Can Upload Product Images" ON storage.objects FOR INSERT WITH CHECK (bucket_id IN ('product-images', 'media-library') AND public.has_permission(auth.uid(), 'media.upload'));
+CREATE POLICY "Admins Can Upload Product Images" ON storage.objects FOR INSERT WITH CHECK (bucket_id IN ('product-images', 'media-library') AND (public.is_admin_user(auth.uid()) OR public.has_permission(auth.uid(), 'media.upload')));
+CREATE POLICY "Admins Can Upload Homepage Images" ON storage.objects FOR INSERT WITH CHECK (bucket_id IN ('homepage-images', 'category-images', 'media-library') AND (public.is_admin_user(auth.uid()) OR public.has_permission(auth.uid(), 'media.upload')));
 CREATE POLICY "Users Can Upload Design Previews" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'design-previews' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users Can Upload User Uploads" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'user-uploads' AND auth.uid()::text = (storage.foldername(name))[1]);
+
