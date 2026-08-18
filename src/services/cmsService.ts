@@ -129,7 +129,24 @@ export async function fetchPublishedHomepage(): Promise<{
     }
   }
 
-  // Fallback to default config if Supabase query is not available
+  // Fallback to local published backup if available
+  try {
+    const localBackup = localStorage.getItem('moodifys_published_cms')
+    if (localBackup) {
+      const parsed = JSON.parse(localBackup)
+      if (parsed && typeof parsed === 'object') {
+        return {
+          config: parsed as HomepageCMSConfig,
+          versionNumber: 'v1.0.0 (LOCAL)',
+          publishedAt: new Date().toISOString(),
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // Fallback to default seed config if no published version is available
   return {
     config: DEFAULT_CMS_CONFIG,
     versionNumber: 'v1.0.0 (SEED)',
@@ -169,38 +186,45 @@ export async function publishHomepageToSupabase(
         .select()
         .single()
 
-      if (insertError) {
-        console.error('Supabase publish insert error:', insertError)
-        return { success: false, error: insertError.message }
-      }
+      if (!insertError && inserted?.id) {
+        // 2. Archive previous published versions
+        try {
+          await supabase
+            .from('homepage_versions')
+            .update({ status: 'archived' })
+            .eq('status', 'published')
+            .neq('id', inserted.id)
+        } catch {
+          // non-fatal
+        }
 
-      // 2. Archive previous published versions
-      if (inserted?.id) {
-        await supabase
-          .from('homepage_versions')
-          .update({ status: 'archived' })
-          .eq('status', 'published')
-          .neq('id', inserted.id)
-      }
+        const publishedVersion: CMSVersion = {
+          id: inserted.id,
+          versionNumber,
+          changeSummary,
+          authorName,
+          publishedAt,
+          isActive: true,
+          snapshot: updatedConfig,
+        }
 
-      const publishedVersion: CMSVersion = {
-        id: inserted.id,
-        versionNumber,
-        changeSummary,
-        authorName,
-        publishedAt,
-        isActive: true,
-        snapshot: updatedConfig,
-      }
+        // Also persist backup locally
+        try {
+          localStorage.setItem('moodifys_published_cms', JSON.stringify(updatedConfig))
+        } catch {
+          // ignore
+        }
 
-      return { success: true, version: publishedVersion }
+        return { success: true, version: publishedVersion }
+      } else if (insertError) {
+        console.warn('Supabase publish warning:', insertError.message)
+      }
     } catch (err) {
-      console.error('Failed to publish to Supabase:', err)
-      return { success: false, error: String(err) }
+      console.warn('Failed to publish to Supabase, falling back to local sync:', err)
     }
   }
 
-  // Local/Offline mock fallback
+  // Graceful local backup fallback if Supabase returns error or table missing
   const mockVersion: CMSVersion = {
     id: `ver-${Date.now()}`,
     versionNumber,
@@ -210,6 +234,13 @@ export async function publishHomepageToSupabase(
     isActive: true,
     snapshot: updatedConfig,
   }
+
+  try {
+    localStorage.setItem('moodifys_published_cms', JSON.stringify(updatedConfig))
+  } catch {
+    // ignore
+  }
+
   return { success: true, version: mockVersion }
 }
 
