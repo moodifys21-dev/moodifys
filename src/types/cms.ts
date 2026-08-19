@@ -1,3 +1,5 @@
+import { Category } from './product'
+
 export interface AnnouncementBarConfig {
   isEnabled: boolean
   text: string
@@ -86,6 +88,7 @@ export interface CategoryBandsConfig {
   isEnabled: boolean
   title?: string
   visibleCategorySlugs: string[]
+  categories?: Category[]
 }
 
 export interface HomepageCMSConfig {

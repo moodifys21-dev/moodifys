@@ -13,8 +13,12 @@ export const CategoryBands: React.FC = () => {
     return null
   }
 
+  const sourceCategories = (categoryBandsConfig?.categories && categoryBandsConfig.categories.length > 0)
+    ? categoryBandsConfig.categories
+    : categories
+
   // Filter active and visible categories, ordered by sortOrder
-  const visibleCategories = categories
+  const visibleCategories = sourceCategories
     .filter((cat) => cat.isActive !== false && cat.isVisible !== false)
     .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
 

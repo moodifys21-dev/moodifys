@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { HomepageCMSConfig } from '@/types/cms'
 import { CMSVersion } from '@/types/cmsVersion'
+import { SEED_CATEGORIES } from '@/lib/seedData'
 
 export const DEFAULT_CMS_CONFIG: HomepageCMSConfig = {
   sectionsOrder: [
@@ -41,6 +42,7 @@ export const DEFAULT_CMS_CONFIG: HomepageCMSConfig = {
     isEnabled: true,
     title: 'COLLECTIONS',
     visibleCategorySlugs: ['t-shirts', 'hoodies', 'sweatshirts', 'caps'],
+    categories: SEED_CATEGORIES,
   },
   editorial: {
     isEnabled: true,
@@ -117,15 +119,23 @@ export async function fetchPublishedHomepage(): Promise<{
         .maybeSingle()
 
       if (!error && data && data.content) {
+        const publishedConfig = data.content as HomepageCMSConfig
+        // Cache authoritative cloud version locally
+        try {
+          localStorage.setItem('moodifys_published_cms', JSON.stringify(publishedConfig))
+        } catch {
+          // ignore
+        }
+
         return {
-          config: data.content as HomepageCMSConfig,
+          config: publishedConfig,
           versionId: data.id,
           versionNumber: data.version_number,
           publishedAt: data.published_at || data.created_at,
         }
       }
     } catch (err) {
-      console.warn('Failed to fetch published homepage from Supabase, using fallback:', err)
+      console.warn('Failed to fetch published homepage from Supabase, checking fallback:', err)
     }
   }
 
@@ -137,7 +147,7 @@ export async function fetchPublishedHomepage(): Promise<{
       if (parsed && typeof parsed === 'object') {
         return {
           config: parsed as HomepageCMSConfig,
-          versionNumber: 'v1.0.0 (LOCAL)',
+          versionNumber: 'v1.0.0 (CACHED)',
           publishedAt: new Date().toISOString(),
         }
       }
@@ -208,7 +218,7 @@ export async function publishHomepageToSupabase(
           snapshot: updatedConfig,
         }
 
-        // Also persist backup locally
+        // Persist backup locally
         try {
           localStorage.setItem('moodifys_published_cms', JSON.stringify(updatedConfig))
         } catch {
@@ -217,31 +227,25 @@ export async function publishHomepageToSupabase(
 
         return { success: true, version: publishedVersion }
       } else if (insertError) {
-        console.warn('Supabase publish warning:', insertError.message)
+        console.error('Supabase publish error:', insertError.message)
+        return {
+          success: false,
+          error: `Supabase error: ${insertError.message}. Check table permissions or RLS policies.`,
+        }
       }
-    } catch (err) {
-      console.warn('Failed to publish to Supabase, falling back to local sync:', err)
+    } catch (err: any) {
+      console.error('Failed to publish to Supabase:', err)
+      return {
+        success: false,
+        error: `Supabase network/database error: ${err?.message || err}`,
+      }
     }
   }
 
-  // Graceful local backup fallback if Supabase returns error or table missing
-  const mockVersion: CMSVersion = {
-    id: `ver-${Date.now()}`,
-    versionNumber,
-    changeSummary,
-    authorName,
-    publishedAt,
-    isActive: true,
-    snapshot: updatedConfig,
+  return {
+    success: false,
+    error: 'Supabase client is not configured. Unable to broadcast changes across all devices.',
   }
-
-  try {
-    localStorage.setItem('moodifys_published_cms', JSON.stringify(updatedConfig))
-  } catch {
-    // ignore
-  }
-
-  return { success: true, version: mockVersion }
 }
 
 /**
@@ -263,10 +267,13 @@ export async function saveDraftHomepageToSupabase(
         content: config,
       })
 
-      if (error) return { success: false, error: error.message }
+      if (error) {
+        console.error('Supabase save draft error:', error.message)
+        return { success: false, error: error.message }
+      }
       return { success: true }
-    } catch (err) {
-      return { success: false, error: String(err) }
+    } catch (err: any) {
+      return { success: false, error: err?.message || String(err) }
     }
   }
   return { success: true }
@@ -336,13 +343,29 @@ export function subscribeToHomepageRealtime(
       )
       .subscribe()
 
+    // Handle tab visibility change and focus for seamless multi-device updates
+    const handleVisibilityOrFocus = async () => {
+      if (document.visibilityState === 'visible') {
+        const latest = await fetchPublishedHomepage()
+        if (latest?.config) {
+          onPublishedUpdate(latest.config)
+        }
+      }
+    }
+
+    window.addEventListener('visibilitychange', handleVisibilityOrFocus)
+    window.addEventListener('focus', handleVisibilityOrFocus)
+
     return () => {
       if (supabase) {
         supabase.removeChannel(channel)
       }
+      window.removeEventListener('visibilitychange', handleVisibilityOrFocus)
+      window.removeEventListener('focus', handleVisibilityOrFocus)
     }
   } catch (err) {
     console.warn('Realtime subscription error:', err)
     return () => {}
   }
 }
+

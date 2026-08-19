@@ -47,6 +47,7 @@ export const AdminHomepageCMS: React.FC = () => {
     updateFeaturedProducts,
     updateTrustStrip,
     updateCustomizationCTA,
+    updateCategoryBands,
     reorderSections,
     toggleSectionVisibility,
     saveDraft,
@@ -117,6 +118,7 @@ export const AdminHomepageCMS: React.FC = () => {
 
   const handlePublish = async () => {
     setPublishError(null)
+    updateCategoryBands({ categories })
     const author = adminUser?.fullName || 'Admin Operator'
     const res = await publishLive(author, 'Published via Admin Portal')
     if (res.success) {
@@ -128,6 +130,7 @@ export const AdminHomepageCMS: React.FC = () => {
 
   const handleSaveDraft = async () => {
     setPublishError(null)
+    updateCategoryBands({ categories })
     const author = adminUser?.fullName || 'Admin Operator'
     const res = await saveDraft(author)
     if (res.success) {
